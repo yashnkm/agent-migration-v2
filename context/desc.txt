@@ -1,0 +1,458 @@
+Software Requirements Specification (SRS)
+Java Codebase Analysis System with AI Agents
+
+1. PROJECT OVERVIEW
+1.1 Purpose
+Create an AI-powered multi-agent system that automatically analyzes Java Spring Boot codebases to derive comprehensive insights about business logic, data flows, architecture, and code relationships.
+1.2 Vision
+Build a foundation AI workflow where multiple specialized agents collaborate to understand codebases deeply - from entry points to entities - enabling various downstream applications like security audits, impact analysis, documentation generation, and code reviews.
+1.3 Scope
+
+In Scope: Java Spring Boot applications, REST APIs, JPA entities, service layers, business logic analysis, data flow tracing
+Out of Scope (for POC): Non-Java languages, runtime analysis, performance profiling, UI code analysis
+Target Scale: 50-500 Java files initially
+
+
+2. SYSTEM ARCHITECTURE
+2.1 High-Level Architecture
+┌─────────────────────────────────────────────────────────┐
+│                  ORCHESTRATOR AGENT                      │
+│  (Coordinates all other agents, manages workflow)       │
+└─────────────────────────────────────────────────────────┘
+                          │
+        ┌─────────────────┼─────────────────┐
+        ▼                 ▼                 ▼
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│  PARSING     │  │ ANALYSIS     │  │  REASONING   │
+│  AGENT       │  │ AGENTS       │  │  AGENT       │
+└──────────────┘  └──────────────┘  └──────────────┘
+        │                 │                 │
+        └─────────────────┴─────────────────┘
+                          ▼
+            ┌──────────────────────────┐
+            │   KNOWLEDGE GRAPH        │
+            │   (Shared Memory)        │
+            └──────────────────────────┘
+2.2 Agent Breakdown
+Agent 1: Orchestrator Agent
+
+Role: Master coordinator that manages the entire workflow
+Responsibilities:
+
+Receives user queries
+Delegates tasks to specialized agents
+Aggregates results from multiple agents
+Decides which agents to invoke based on query type
+Maintains conversation context
+
+
+
+Agent 2: Code Parser Agent
+
+Role: Extracts structural information from code
+Responsibilities:
+
+Use tree-sitter to parse all Java files
+Build three core maps: field access map, method call map, entry points map
+Identify code patterns (controllers, services, repositories, entities)
+Extract annotations and their values
+Create initial knowledge graph nodes
+
+
+Tools Needed:
+
+tree-sitter Java parser
+File system access
+Pattern matching queries
+
+
+
+Agent 3: Architecture Analysis Agent
+
+Role: Understands high-level architecture and layers
+Responsibilities:
+
+Identify layered architecture (Controller → Service → Repository → Entity)
+Map dependency relationships between classes
+Detect design patterns (Repository, Service, DTO, etc.)
+Identify cross-cutting concerns (transactions, security, logging)
+Create architecture diagram data
+
+
+Inputs: Parsed code from Agent 2
+Outputs: Architecture map, layer classification
+
+Agent 4: Business Logic Analyzer Agent
+
+Role: Understands what the code actually does
+Responsibilities:
+
+Read method bodies to understand business rules
+Identify validation logic
+Extract business constraints
+Find data transformations
+Detect side effects
+Summarize business operations in natural language
+
+
+Inputs: Code snippets, method definitions
+Outputs: Business logic summaries
+
+Agent 5: Data Flow Tracer Agent
+
+Role: Traces how data moves through the system
+Responsibilities:
+
+Implement backtracking from entities to entry points
+Implement forward tracing from endpoints to entities
+Find all paths between any two points in code
+Identify data transformations along paths
+Detect data access patterns (CRUD operations)
+
+
+Inputs: Knowledge graph from Agent 2
+Outputs: Complete data flow paths
+
+Agent 6: Entity Relationship Agent
+
+Role: Understands database schema and entity relationships
+Responsibilities:
+
+Extract JPA entity definitions
+Map table names and column mappings
+Identify relationships (@OneToMany, @ManyToOne, etc.)
+Extract constraints and validations
+Build entity relationship diagram data
+
+
+Inputs: Entity classes, JPA annotations
+Outputs: ER diagram, database schema map
+
+Agent 7: API Documentation Agent
+
+Role: Documents REST APIs
+Responsibilities:
+
+Extract all REST endpoints
+Document request/response formats
+Identify path parameters, query params, request bodies
+Extract authentication/authorization requirements
+Generate OpenAPI-like documentation
+
+
+Inputs: Controller classes, endpoint methods
+Outputs: API documentation in structured format
+
+Agent 8: Dependency Graph Agent
+
+Role: Maps all code dependencies
+Responsibilities:
+
+Build complete dependency graph (who depends on whom)
+Identify circular dependencies
+Calculate coupling metrics
+Find tightly coupled vs loosely coupled components
+Suggest refactoring opportunities
+
+
+Inputs: Import statements, field injections, method calls
+Outputs: Dependency graph, coupling metrics
+
+
+3. CORE COMPONENTS
+3.1 Knowledge Graph (Shared Memory)
+Structure:
+Nodes:
+- Classes (with type: Controller/Service/Repository/Entity)
+- Methods (with signatures, annotations)
+- Fields (with types, access modifiers)
+- Endpoints (HTTP method + path)
+- Database Tables
+- Annotations
+
+Edges:
+- calls (method → method)
+- depends_on (class → class)
+- accesses (method → field, with read/write type)
+- maps_to (entity → table)
+- handles (endpoint → controller method)
+- implements (class → interface)
+- extends (class → class)
+Storage Format:
+
+In-memory dictionary/graph structure for POC
+Later: Neo4j or similar graph database for production
+
+3.2 Parsing Module (Foundation)
+Components:
+
+tree-sitter Integration
+
+Java grammar loader
+File parser
+Query executor
+
+
+Pattern Extractors
+
+Class extractor (finds all classes with metadata)
+Method extractor (finds all methods with bodies)
+Annotation extractor (finds all annotations with values)
+Method call extractor (finds who calls whom)
+Field access extractor (finds reads/writes)
+Import extractor (finds dependencies)
+
+
+Map Builders
+
+Field access map builder
+Method call map builder
+Entry points map builder
+Inheritance map builder
+
+
+
+3.3 Backtracking Engine
+Core Algorithms:
+
+Backward Traversal
+
+Input: Target (entity/field/method)
+Process: Walk dependency graph backwards
+Output: All entry points that reach target
+
+
+Forward Traversal
+
+Input: Entry point (endpoint)
+Process: Walk dependency graph forwards
+Output: All entities/methods accessed
+
+
+Path Finding
+
+Find all paths between two nodes
+Shortest path calculation
+Critical path identification
+
+
+
+Implementation Strategy:
+
+Use BFS (Breadth-First Search) for shortest paths
+Use DFS (Depth-First Search) for all paths
+Implement cycle detection
+Cache common queries for performance
+
+
+4. AGENT WORKFLOWS
+4.1 Initialization Workflow
+Trigger: System starts or new codebase loaded
+Steps:
+
+Orchestrator receives codebase path
+Orchestrator delegates to Parser Agent
+Parser Agent executes:
+
+Scan directory for .java files
+Parse each file with tree-sitter
+Build all maps (field, call, entry)
+Store in knowledge graph
+
+
+Orchestrator delegates to Architecture Agent
+Architecture Agent executes:
+
+Classify all classes by layer
+Build dependency graph
+Identify patterns
+
+
+Orchestrator confirms: "System ready for queries"
+
+Expected Time: 2-10 seconds for 50-500 files
+
+4.2 Query Workflow: "What endpoints can modify Field X?"
+Steps:
+
+User asks: "What endpoints can modify Employee.email?"
+Orchestrator Agent analyzes query:
+
+Recognizes: backtracking query
+Target: field "Employee.email"
+Access type: "write/modify"
+Delegates to: Data Flow Tracer Agent
+
+
+Data Flow Tracer Agent:
+
+Queries knowledge graph: "Find all methods that write to Employee.email"
+Result: ["EmployeeService.updateEmployee", "AuthService.register"]
+For each writer, calls backtracking engine
+Finds all paths to entry points
+Returns: List of complete paths
+
+
+Orchestrator delegates to API Documentation Agent:
+
+For each entry point found, get API details
+Extract: HTTP method, path, parameters, handler info
+
+
+Orchestrator delegates to Business Logic Agent:
+
+For each path, get business logic summary
+What validations happen?
+What transformations occur?
+
+
+Orchestrator aggregates results and formats response:
+
+   Found 2 endpoints that can modify Employee.email:
+   
+   1. PUT /api/employees/{id}
+      - Handler: EmployeeController.updateEmployee()
+      - Flow: Controller → EmployeeService → writes to email
+      - Business Logic: Validates email format, checks authorization
+   
+   2. POST /api/auth/register
+      - Handler: AuthController.register()
+      - Flow: AuthController → UserService → EmployeeService → writes to email
+      - Business Logic: Creates new user, generates default employee
+
+4.3 Query Workflow: "Explain how employee creation works"
+Steps:
+
+User asks: "Explain how employee creation works"
+Orchestrator analyzes query:
+
+Recognizes: end-to-end flow explanation
+Entity: "Employee"
+Operation: "creation"
+Delegates to multiple agents in sequence
+
+
+Entity Relationship Agent:
+
+Find Employee entity definition
+Return: fields, table name, relationships
+
+
+Data Flow Tracer Agent:
+
+Find all entry points that create Employee
+Trace forward from each entry point
+Return: complete creation flows
+
+
+Business Logic Agent:
+
+For each flow, analyze business rules
+What validations?
+What defaults?
+What side effects?
+
+
+API Documentation Agent:
+
+Get API details for creation endpoints
+
+
+Orchestrator synthesizes comprehensive answer:
+
+   Employee Creation Process:
+   
+   Entity: Employee
+   - Table: employees
+   - Fields: id (PK), name, email, department, salary
+   - Relationships: belongs to Department
+   
+   Creation Endpoints:
+   
+   1. POST /api/employees
+      Entry: EmployeeController.createEmployee()
+      Flow:
+        → EmployeeController receives EmployeeDTO
+        → Validates: name not empty, email valid, salary >= 30000
+        → Calls EmployeeService.createEmployee()
+        → Service checks: department exists
+        → Service sets: default department if null, created_date
+        → Calls EmployeeRepository.save()
+        → Returns: saved Employee with generated ID
+   
+   2. POST /api/auth/register (indirect creation)
+      Entry: AuthController.register()
+      Flow:
+        → Creates User account
+        → Calls EmployeeService.createEmployeeFromUser()
+        → Auto-generates Employee with user's info
+        → Sets default salary and department
+   
+   Business Rules:
+   - Email must be unique
+   - Minimum salary: 30000
+   - Default department: "General"
+   - Automatically assigns employee_id
+
+4.4 Query Workflow: "What would break if I change method X?"
+Steps:
+
+User asks: "What breaks if I change EmployeeService.calculateSalary()?"
+Orchestrator analyzes:
+
+Recognizes: impact analysis query
+Target: method "EmployeeService.calculateSalary"
+Delegates to multiple agents
+
+
+Data Flow Tracer Agent:
+
+Backtrack from calculateSalary()
+Find all methods that call it
+Find all entry points that reach it
+
+
+Dependency Graph Agent:
+
+Find all direct callers
+Find all indirect dependencies
+Calculate impact scope
+
+
+Business Logic Agent:
+
+Analyze what calculateSalary() does
+Identify critical business rules
+
+
+Orchestrator provides impact assessment:
+
+   Impact Analysis: EmployeeService.calculateSalary()
+   
+   Direct Callers (3):
+   - EmployeeService.updateSalary()
+   - PayrollService.processMonthly()
+   - BonusService.calculateBonus()
+   
+   Affected Entry Points (5):
+   1. PUT /api/employees/{id}/salary - updates salary
+   2. POST /api/payroll/process - monthly payroll
+   3. GET /api/payroll/preview - payroll preview
+   4. POST /api/bonus/calculate - bonus calculation
+   5. SCHEDULED: MonthlyPayrollJob - runs monthly
+   
+   Business Logic Impact:
+   - calculateSalary() applies tax deductions and bonuses
+   - Used in 3 critical financial operations
+   - Affects: payroll reports, tax calculations, bonus allocation
+   
+   Risk Level: HIGH
+   - Financial calculation method
+   - Used in automated jobs
+   - Multiple dependencies
+   
+   Recommendation:
+   - Add comprehensive unit tests
+   - Test with PayrollService integration
+   - Verify tax calculation logic
+   - Check monthly job behavior

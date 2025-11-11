@@ -1,0 +1,18 @@
+# Core parsing
+tree-sitter==0.21.3
+tree-sitter-java==0.21.0
+networkx==3.2.1
+
+# LLM & AI (Gemini 2.5 Flash only)
+langchain==0.3.13
+langchain-google-genai==2.0.8
+langgraph==0.2.63
+google-generativeai==0.8.3
+
+# Environment & UI
+python-dotenv==1.0.0
+streamlit==1.31.0
+
+# Data handling
+pydantic==2.10.6
+
