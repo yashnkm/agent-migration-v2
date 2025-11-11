@@ -12,6 +12,11 @@ google-generativeai==0.8.3
 # RAG (Retrieval Augmented Generation)
 faiss-cpu==1.9.0
 langchain-community==0.3.13
+sentence-transformers==3.3.1
+# PyTorch CPU (required for sentence-transformers on Windows)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1+cpu
+torchvision==0.20.1+cpu
 
 # Environment & UI
 python-dotenv==1.0.0

@@ -204,14 +204,19 @@ if st.session_state.graph_created and st.session_state.knowledge_graph:
 
     with col1:
         if not st.session_state.rag_index_created:
+            # Checkbox for local embeddings
+            use_local = st.checkbox("Use Local Embeddings (offline, no quota)", value=False,
+                                   help="Use local sentence-transformers instead of Gemini (slower but no API limits)")
+
             if st.button("🚀 Create RAG Index", type="primary", use_container_width=True):
-                with st.spinner("Creating RAG index with Gemini embeddings..."):
+                spinner_text = "Creating RAG index with local embeddings..." if use_local else "Creating RAG index with Gemini embeddings..."
+                with st.spinner(spinner_text):
                     try:
                         # Convert graph to documents
                         documents = convert_graph_to_documents(kg)
 
-                        # Create vectorstore
-                        manager = VectorStoreManager(output_dimensionality=768)
+                        # Create vectorstore (will auto-fallback to local if Gemini fails)
+                        manager = VectorStoreManager(output_dimensionality=768, use_local=use_local)
                         repo_name = repo_info['repo']
                         vectorstore = manager.create_vectorstore(documents, repo_name)
 
