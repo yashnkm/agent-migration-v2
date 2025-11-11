@@ -4,8 +4,10 @@ Input: GitHub URL
 Output: Knowledge Graph JSON
 """
 import streamlit as st
+import streamlit_markdown as stmd  # For Mermaid rendering
 import sys
 import json
+import urllib.parse  # For Mermaid Live Editor fallback
 from pathlib import Path
 
 # Add src to path
@@ -20,6 +22,8 @@ from src.inference.graph_summarizer import GraphSummarizer
 from src.rag.graph_to_documents import convert_graph_to_documents
 from src.rag.vectorstore_manager import VectorStoreManager
 from src.rag.agents.architecture_agent import create_architecture_agent
+from src.rag.report_generator import ArchitectureReportGenerator, MermaidDiagramGenerator
+from src.rag.report_formatter import format_report_as_markdown, format_diagram_with_report
 
 
 # Page config
@@ -28,6 +32,35 @@ st.set_page_config(
     page_icon="🔍",
     layout="wide"
 )
+
+# Custom CSS for better Mermaid diagram visibility
+st.markdown("""
+<style>
+    /* Make Mermaid diagrams fully visible and scrollable */
+    .stMarkdown {
+        overflow-x: auto;
+        overflow-y: auto;
+    }
+
+    /* Mermaid diagram container styling */
+    .stMarkdown pre {
+        overflow-x: auto;
+        overflow-y: auto;
+        max-height: 800px;
+        padding: 20px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+    }
+
+    /* Ensure Mermaid SVG is visible */
+    .stMarkdown svg {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 0 auto;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Initialize session state
 if 'knowledge_graph' not in st.session_state:
@@ -44,6 +77,10 @@ if 'vectorstore' not in st.session_state:
     st.session_state.vectorstore = None
 if 'architecture_agent' not in st.session_state:
     st.session_state.architecture_agent = None
+if 'architecture_report' not in st.session_state:
+    st.session_state.architecture_report = None
+if 'diagrams' not in st.session_state:
+    st.session_state.diagrams = {}
 
 
 def create_graph(github_url: str):
@@ -289,6 +326,215 @@ if st.session_state.graph_created and st.session_state.knowledge_graph:
 
     st.write("")
     st.write("---")
+
+    # Architecture Report & Diagram Generation
+    if st.session_state.rag_index_created and st.session_state.vectorstore:
+        st.write("## 📊 Architecture Report & Diagrams")
+
+        col1, col2 = st.columns([1, 3])
+
+        with col1:
+            if st.button("📝 Generate Report", type="primary", use_container_width=True):
+                with st.spinner("Generating comprehensive architecture report..."):
+                    try:
+                        generator = ArchitectureReportGenerator(st.session_state.vectorstore)
+                        report = generator.generate_report(repo_info['repo'])
+                        st.session_state.architecture_report = report
+                        st.success("Report generated successfully!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Failed to generate report: {str(e)}")
+                        import traceback
+                        with st.expander("Error Details"):
+                            st.code(traceback.format_exc())
+
+        with col2:
+            if st.session_state.architecture_report:
+                st.info("Architecture report ready! Scroll down to view details and generate diagrams.")
+            else:
+                st.info("Generate a comprehensive architecture report to understand the system design, patterns, and structure.")
+
+        # Display Report
+        if st.session_state.architecture_report:
+            report = st.session_state.architecture_report
+
+            st.write("")
+            st.write("### 📋 Architecture Report")
+
+            # Download button for report
+            md_report = format_report_as_markdown(report)
+            st.download_button(
+                label="⬇️ Download Report (Markdown)",
+                data=md_report,
+                file_name=f"{report.project_name}_architecture_report.md",
+                mime="text/markdown"
+            )
+
+            st.write("")
+
+            # Executive Summary
+            with st.expander("📌 Executive Summary", expanded=True):
+                st.write(report.executive_summary)
+
+            # Architecture Patterns
+            with st.expander("🏗️ Architecture Patterns"):
+                for pattern in report.architecture_patterns:
+                    st.write(f"- {pattern}")
+
+            # Layers
+            with st.expander("📚 Architectural Layers"):
+                for layer in report.layers:
+                    st.write(f"#### {layer.name}")
+                    st.write(f"**Responsibilities:** {layer.responsibilities}")
+                    st.write(f"**Components:**")
+                    for comp in layer.components:
+                        st.write(f"- {comp}")
+                    st.write("")
+
+            # Key Components
+            with st.expander("🔑 Key Components"):
+                for comp in report.key_components:
+                    st.write(f"#### {comp.name} ({comp.type})")
+                    st.write(f"**Purpose:** {comp.purpose}")
+                    if comp.dependencies:
+                        st.write(f"**Dependencies:** {', '.join(comp.dependencies)}")
+                    st.write("")
+
+            # Data Flow
+            with st.expander("🔄 Data Flow"):
+                st.write(report.data_flow)
+
+            # Technology Stack
+            with st.expander("⚙️ Technology Stack"):
+                for tech in report.technology_stack:
+                    st.write(f"- {tech}")
+
+            # Strengths
+            with st.expander("✅ Strengths"):
+                for strength in report.strengths:
+                    st.write(f"- {strength}")
+
+            # Recommendations
+            with st.expander("💡 Recommendations"):
+                for rec in report.recommendations:
+                    st.write(f"- {rec}")
+
+            st.write("")
+            st.write("---")
+
+            # Diagram Generation
+            st.write("### 📐 Architecture Diagrams")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                if st.button("🔷 Generate Component Diagram", use_container_width=True):
+                    with st.spinner("Generating component diagram..."):
+                        try:
+                            generator = MermaidDiagramGenerator()
+                            diagram = generator.generate_component_diagram(report)
+                            st.session_state.diagrams['component'] = diagram
+                            st.success("Component diagram generated!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to generate diagram: {str(e)}")
+
+            with col2:
+                if st.button("📦 Generate Class Diagram", use_container_width=True):
+                    with st.spinner("Generating class diagram..."):
+                        try:
+                            generator = MermaidDiagramGenerator()
+                            diagram = generator.generate_class_diagram(report)
+                            st.session_state.diagrams['class'] = diagram
+                            st.success("Class diagram generated!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to generate diagram: {str(e)}")
+
+            # Display Diagrams
+            if 'component' in st.session_state.diagrams:
+                st.write("")
+                st.write("#### 🔷 Component Architecture Diagram")
+
+                diagram = st.session_state.diagrams['component']
+                st.write(f"**Description:** {diagram.description}")
+
+                # Download button for diagram
+                diagram_md = format_diagram_with_report(diagram, report)
+                st.download_button(
+                    label="⬇️ Download Component Diagram",
+                    data=diagram_md,
+                    file_name=f"{report.project_name}_component_diagram.md",
+                    mime="text/markdown",
+                    key="download_component"
+                )
+
+                # Render Mermaid diagram using streamlit-markdown (full width, scrollable)
+                st.write("")
+                try:
+                    with st.container():
+                        stmd.st_markdown(
+                            f"""```mermaid
+{diagram.mermaid_code}
+```""",
+                            unsafe_allow_html=True,
+                            height=800  # Set explicit height for better visibility
+                        )
+                except Exception as e:
+                    # Fallback: Provide link to Mermaid Live Editor
+                    encoded_diagram = urllib.parse.quote(diagram.mermaid_code)
+                    mermaid_live_url = f"https://mermaid.live/edit#pako:{encoded_diagram}"
+
+                    st.warning("⚠️ Diagram rendering failed in the browser.")
+                    st.info(f"📊 [Click here to view the diagram in Mermaid Live Editor]({mermaid_live_url})")
+
+                    # Also show the raw code in an expander
+                    with st.expander("View Raw Mermaid Code"):
+                        st.code(diagram.mermaid_code, language="mermaid")
+
+            if 'class' in st.session_state.diagrams:
+                st.write("")
+                st.write("#### 📦 Class Diagram")
+
+                diagram = st.session_state.diagrams['class']
+                st.write(f"**Description:** {diagram.description}")
+
+                # Download button for diagram
+                diagram_md = format_diagram_with_report(diagram, report)
+                st.download_button(
+                    label="⬇️ Download Class Diagram",
+                    data=diagram_md,
+                    file_name=f"{report.project_name}_class_diagram.md",
+                    mime="text/markdown",
+                    key="download_class"
+                )
+
+                # Render Mermaid diagram using streamlit-markdown (full width, scrollable)
+                st.write("")
+                try:
+                    with st.container():
+                        stmd.st_markdown(
+                            f"""```mermaid
+{diagram.mermaid_code}
+```""",
+                            unsafe_allow_html=True,
+                            height=800  # Set explicit height for better visibility
+                        )
+                except Exception as e:
+                    # Fallback: Provide link to Mermaid Live Editor
+                    encoded_diagram = urllib.parse.quote(diagram.mermaid_code)
+                    mermaid_live_url = f"https://mermaid.live/edit#pako:{encoded_diagram}"
+
+                    st.warning("⚠️ Diagram rendering failed in the browser.")
+                    st.info(f"📊 [Click here to view the diagram in Mermaid Live Editor]({mermaid_live_url})")
+
+                    # Also show the raw code in an expander
+                    with st.expander("View Raw Mermaid Code"):
+                        st.code(diagram.mermaid_code, language="mermaid")
+
+        st.write("")
+        st.write("---")
+
     st.write("## 📥 Export Graph")
 
     # Export full graph as JSON
@@ -327,6 +573,8 @@ if st.session_state.graph_created and st.session_state.knowledge_graph:
         st.session_state.rag_index_created = False
         st.session_state.vectorstore = None
         st.session_state.architecture_agent = None
+        st.session_state.architecture_report = None
+        st.session_state.diagrams = {}
         st.rerun()
 
 else:

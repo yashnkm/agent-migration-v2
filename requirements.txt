@@ -21,6 +21,7 @@ torchvision==0.20.1+cpu
 # Environment & UI
 python-dotenv==1.0.0
 streamlit==1.31.0
+streamlit-markdown==1.1.0  # For Mermaid diagram rendering
 
 # Data handling
 pydantic==2.10.6
