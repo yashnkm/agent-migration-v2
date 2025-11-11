@@ -34,11 +34,12 @@ class EdgeType(Enum):
 
 @dataclass
 class ClassNode:
-    """Represents a Java class in the knowledge graph"""
+    """Represents a Java class/interface/enum in the knowledge graph"""
     name: str
     package: str
     file_path: str
     class_type: str  # Controller, Service, Repository, Entity, etc.
+    java_type: str = "class"  # "class", "interface", "enum", "annotation"
     modifiers: List[str] = field(default_factory=list)
     annotations: List[str] = field(default_factory=list)
     interfaces: List[str] = field(default_factory=list)
@@ -258,10 +259,20 @@ class KnowledgeGraph:
 
     def get_stats(self) -> Dict[str, int]:
         """Get statistics about the knowledge graph"""
+        # Count by java_type
+        java_type_counts = {"class": 0, "interface": 0, "enum": 0}
+        for class_node in self.classes.values():
+            java_type = getattr(class_node, 'java_type', 'class')
+            if java_type in java_type_counts:
+                java_type_counts[java_type] += 1
+
         return {
             "total_nodes": self.graph.number_of_nodes(),
             "total_edges": self.graph.number_of_edges(),
-            "classes": len(self.classes),
+            "classes": len(self.classes),  # Total: classes + interfaces + enums
+            "classes_only": java_type_counts["class"],
+            "interfaces": java_type_counts["interface"],
+            "enums": java_type_counts["enum"],
             "methods": len(self.methods),
             "fields": len(self.fields),
             "endpoints": len(self.endpoints),

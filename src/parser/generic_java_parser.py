@@ -133,27 +133,41 @@ class GenericJavaParser:
     def extract_classes(self, tree: Node, source_code: bytes,
                        package: str, file_path: str) -> List[Dict[str, Any]]:
         """
-        Extract all classes WITHOUT classification
+        Extract all classes, interfaces, and enums WITHOUT classification
         No Controller/Service/Entity detection here
         """
         classes = []
 
+        # Query for classes, interfaces, and enums
         query = self.language.query("""
-            (class_declaration
-                name: (identifier) @class_name
-            ) @class
+            [
+                (class_declaration
+                    name: (identifier) @class_name
+                ) @class
+
+                (interface_declaration
+                    name: (identifier) @interface_name
+                ) @interface
+
+                (enum_declaration
+                    name: (identifier) @enum_name
+                ) @enum
+            ]
         """)
 
         captures = query.captures(tree)
 
-        # Group captures
+        # Group captures and determine type
         class_nodes = {}
         for node, capture_name in captures:
-            if capture_name == "class":
-                class_nodes[node.id] = {"node": node}
-            elif capture_name == "class_name":
+            if capture_name in ["class", "interface", "enum"]:
+                # Determine java_type from capture name
+                java_type = "class" if capture_name == "class" else capture_name
+                class_nodes[node.id] = {"node": node, "java_type": java_type}
+            elif capture_name in ["class_name", "interface_name", "enum_name"]:
                 parent = node.parent
-                while parent and parent.type != 'class_declaration':
+                # Find parent declaration
+                while parent and parent.type not in ['class_declaration', 'interface_declaration', 'enum_declaration']:
                     parent = parent.parent
                 if parent and parent.id in class_nodes:
                     class_nodes[parent.id]["name"] = self.extract_text(node, source_code)
@@ -190,6 +204,7 @@ class GenericJavaParser:
                 'name': name,
                 'package': package,
                 'file_path': file_path,
+                'java_type': class_data.get('java_type', 'class'),  # class, interface, or enum
                 'annotations': annotations,  # Detailed annotation info
                 'modifiers': modifiers,
                 'interfaces': interfaces,
@@ -357,12 +372,13 @@ class GenericJavaParser:
         classes = self.extract_classes(root_node, source_code, package, file_path)
 
         for class_data in classes:
-            # Store class WITHOUT type classification
+            # Store class/interface/enum WITHOUT type classification
             class_node = ClassNode(
                 name=class_data['name'],
                 package=class_data['package'],
                 file_path=class_data['file_path'],
-                class_type="UNCLASSIFIED",  # Will be inferred later
+                class_type="UNCLASSIFIED",  # Will be inferred later (Controller/Service/etc)
+                java_type=class_data['java_type'],  # class, interface, or enum
                 modifiers=class_data['modifiers'],
                 annotations=[ann['name'] for ann in class_data['annotations']],  # Store names
                 interfaces=class_data['interfaces'],
