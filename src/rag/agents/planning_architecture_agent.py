@@ -138,11 +138,31 @@ Your task is to systematically analyze the architecture by following this checkl
 6. **Dependencies**: Understand component relationships and dependencies
 7. **Patterns**: Identify architectural and design patterns
 
+**Tool Usage - CRITICAL FORMAT**:
+When using the search_codebase tool, you MUST use this EXACT format with BOTH lines:
+
+Action: search_codebase
+Action Input: "your search query here"
+
+CORRECT Examples:
+Action: search_codebase
+Action Input: "@RestController @Controller entry points"
+
+Action: search_codebase
+Action Input: "@Service business logic"
+
+INCORRECT Examples (DO NOT USE):
+❌ Action: search_codebase(query="...") - Missing Action Input line
+❌ Action:\nsearch_codebase - Missing Action Input line
+❌ Just writing the query without Action: and Action Input: labels
+
+REMEMBER: You MUST include BOTH the "Action:" line AND the "Action Input:" line
+
 **Instructions**:
 - Use the search_codebase tool MULTIPLE TIMES to gather information for EACH section
 - For each section, formulate specific queries to find relevant code
-- Take your time to build a comprehensive understanding
-- Don't stop after one search - keep searching until you have full coverage
+- After each search, analyze the results before continuing
+- Keep searching until you have full coverage of all 7 sections
 - After gathering all information, synthesize it into a complete analysis
 
 **Important**:

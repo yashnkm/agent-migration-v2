@@ -82,7 +82,7 @@ You have access to the following tools:
 
 {tools}
 
-Use the following format:
+Use the following format EXACTLY. You MUST include the "Action Input:" line:
 
 Question: the input question you must answer
 Thought: you should always think about what to do
@@ -92,6 +92,21 @@ Observation: the result of the action
 ... (this Thought/Action/Action Input/Observation can repeat N times)
 Thought: I now know the final answer
 Final Answer: the final answer to the original input question
+
+CRITICAL: When you use an Action, you MUST provide Action Input on the next line.
+
+Example of CORRECT format:
+Thought: I need to find controllers
+Action: search_codebase
+Action Input: "@RestController @Controller"
+Observation: [results will be shown here]
+
+Example of INCORRECT format (DO NOT DO THIS):
+Thought: I need to find controllers
+Action: search_codebase
+Observation: [This is WRONG - missing Action Input]
+
+REMEMBER: Always write "Action Input:" followed by your query!
 
 Begin!
 
