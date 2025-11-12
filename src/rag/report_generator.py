@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.vectorstores import FAISS
-from src.rag.agents.planning_architecture_agent import PlanningArchitectureAgent
+from src.rag.agents.framework_aware_architecture_agent import FrameworkAwareArchitectureAgent
 
 
 # Pydantic Models for Structured Output
@@ -95,42 +95,51 @@ class ArchitectureReportGenerator:
         Returns:
             ArchitectureReport with all details
         """
-        print("Starting systematic architecture analysis...")
-        print("Agent will perform multiple RAG queries to build comprehensive understanding...")
+        print("Starting framework-aware architecture analysis...")
+        print("Step 1: Detecting framework...")
+        print("Step 2: Framework-specific RAG queries...")
+        print("Step 3: Comprehensive analysis...")
 
-        # Use Planning Architecture Agent for systematic analysis
-        planning_agent = PlanningArchitectureAgent(self.vectorstore)
+        # Use Framework-Aware Architecture Agent
+        framework_agent = FrameworkAwareArchitectureAgent(self.vectorstore)
 
-        # Get comprehensive analysis through multi-step querying
-        analysis_result = planning_agent.analyze_architecture(project_name)
+        # Get framework-aware analysis
+        analysis_result = framework_agent.analyze_architecture(project_name)
 
         # Parse the agent's analysis into structured report
         print("Converting analysis into structured report...")
-        report = self._parse_analysis_to_report(project_name, analysis_result['analysis'])
+        report = self._parse_analysis_to_report(
+            project_name,
+            analysis_result['framework'],
+            analysis_result['analysis']
+        )
 
         print("✓ Architecture report generated!")
         return report
 
-    def _parse_analysis_to_report(self, project_name: str, analysis: str) -> ArchitectureReport:
+    def _parse_analysis_to_report(self, project_name: str, framework: str, analysis: str) -> ArchitectureReport:
         """
         Parse agent's analysis into structured ArchitectureReport
 
         Args:
             project_name: Project name
+            framework: Detected framework
             analysis: Agent's comprehensive analysis text
 
         Returns:
             Structured ArchitectureReport
         """
         # Create prompt to convert analysis to structured format
-        prompt = f"""Convert this architecture analysis into a structured report.
+        prompt = f"""Convert this {framework} architecture analysis into a structured report.
 
 PROJECT: {project_name}
+FRAMEWORK: {framework}
 
 COMPREHENSIVE ANALYSIS:
 {analysis}
 
 Extract and structure the information into the required format.
+Include {framework}-specific details in the architecture patterns and technology stack.
 If information is missing, make reasonable inferences based on what was found."""
 
         # Use structured output

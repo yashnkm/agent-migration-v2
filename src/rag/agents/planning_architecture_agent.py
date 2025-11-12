@@ -223,16 +223,42 @@ Be thorough and systematic. Don't rush - take time to search multiple times."""
         # Invoke agent
         print("Agent is systematically searching the codebase...")
         print("This will take multiple RAG queries to build complete understanding...")
+        print("")
 
-        result = self.agent.invoke({
-            "messages": [{"role": "user", "content": analysis_prompt}]
-        })
+        try:
+            result = self.agent.invoke({
+                "messages": [{"role": "user", "content": analysis_prompt}]
+            })
 
-        # Extract final response
-        final_message = result['messages'][-1]
-        analysis = final_message.content
+            # Debug: Check what we got back
+            print(f"\nDEBUG: Got {len(result['messages'])} messages in result")
 
-        print("✓ Systematic analysis complete!")
+            # Check if agent actually used tools
+            tool_calls_count = 0
+            for msg in result['messages']:
+                if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                    tool_calls_count += len(msg.tool_calls)
+
+            print(f"DEBUG: Agent made {tool_calls_count} tool calls")
+
+            if tool_calls_count == 0:
+                print("⚠️  WARNING: Agent did not use any tools - analysis may be generic!")
+                print("⚠️  This usually means the agent hit the 'Action Input' error")
+
+            # Extract final response
+            final_message = result['messages'][-1]
+            analysis = final_message.content
+
+            print("\n✓ Systematic analysis complete!")
+
+        except Exception as e:
+            print(f"\n❌ ERROR during agent execution: {str(e)}")
+            print("Falling back to direct RAG queries...")
+
+            # Fallback: do direct RAG queries
+            analysis = self._fallback_direct_queries(project_name)
+
+            result = {"messages": []}
 
         # Parse and structure the analysis
         return {
@@ -269,3 +295,60 @@ Provide a detailed analysis with actual class names and examples."""
         })
 
         return result['messages'][-1].content
+
+    def _fallback_direct_queries(self, project_name: str) -> str:
+        """
+        Fallback: Direct RAG queries if agent fails
+
+        Args:
+            project_name: Project name
+
+        Returns:
+            Analysis from direct queries
+        """
+        print("\n🔄 Using direct RAG query fallback...")
+
+        findings = []
+
+        for section_name, section_info in ARCHITECTURE_ANALYSIS_PLAN.items():
+            print(f"  🔍 Querying: {section_name}...")
+
+            query = section_info['query']
+            results = self.vectorstore.similarity_search(query, k=8)
+
+            section_findings = f"\n### {section_name}\n"
+            section_findings += f"Goal: {section_info['goal']}\n\n"
+
+            if results:
+                for i, doc in enumerate(results, 1):
+                    content = doc.page_content[:400]
+                    metadata = doc.metadata
+                    section_findings += f"**{metadata.get('file_path', 'Unknown')}**\n"
+                    section_findings += f"  Type: {metadata.get('node_type', 'Unknown')}\n"
+                    section_findings += f"  {content}...\n\n"
+            else:
+                section_findings += "No results found.\n\n"
+
+            findings.append(section_findings)
+
+        all_findings = "\n".join(findings)
+
+        # Synthesize findings with LLM
+        synthesis_prompt = f"""Analyze this {project_name} codebase based on the search results below.
+
+{all_findings}
+
+Provide a comprehensive architecture analysis with:
+- Executive summary
+- Architecture patterns
+- Layered structure
+- Key components
+- Data flow
+- Technology stack
+- Strengths
+- Recommendations
+
+Use actual class names and specifics from the search results."""
+
+        response = self.llm.invoke(synthesis_prompt)
+        return response.content
