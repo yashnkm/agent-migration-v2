@@ -19,6 +19,12 @@ from src.parser.generic_java_parser import GenericJavaParser
 from src.parser.relationship_extractor import RelationshipExtractor
 from src.inference.framework_detector_v2 import FrameworkDetectorV2
 from src.inference.graph_summarizer import GraphSummarizer
+from src.inference.presentation_layer_extractor import extract_presentation_layer
+from src.rag.agents.functional_spec_agent import (
+    FunctionalSpecAgent,
+    format_feature_spec_markdown,
+    format_project_spec_markdown
+)
 from src.rag.graph_to_documents import convert_graph_to_documents
 from src.rag.vectorstore_manager import VectorStoreManager
 from src.rag.agents.architecture_agent import create_architecture_agent
@@ -81,6 +87,12 @@ if 'architecture_report' not in st.session_state:
     st.session_state.architecture_report = None
 if 'diagrams' not in st.session_state:
     st.session_state.diagrams = {}
+if 'presentation_layer_info' not in st.session_state:
+    st.session_state.presentation_layer_info = None
+if 'functional_spec' not in st.session_state:
+    st.session_state.functional_spec = None
+if 'single_feature_spec' not in st.session_state:
+    st.session_state.single_feature_spec = None
 
 
 def create_graph(github_url: str):
@@ -234,6 +246,95 @@ if st.session_state.graph_created and st.session_state.knowledge_graph:
     st.write("")
     st.write("---")
 
+    # Presentation Layer Extraction Section
+    st.write("## 🎯 Presentation Layer Analysis")
+
+    col1, col2 = st.columns([1, 3])
+
+    with col1:
+        # Only show button if framework is detected
+        if st.session_state.framework_detection:
+            if st.button("📊 Extract Presentation Layer", type="primary", use_container_width=True):
+                with st.spinner("🔍 Extracting controllers/actions..."):
+                    try:
+                        framework_name = st.session_state.framework_detection.get('framework', 'Unknown')
+                        presentation_info = extract_presentation_layer(kg, framework_name)
+                        st.session_state.presentation_layer_info = presentation_info
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Extraction failed: {str(e)}")
+                        import traceback
+                        with st.expander("Error Details"):
+                            st.code(traceback.format_exc())
+        else:
+            st.info("Detect framework first")
+
+    with col2:
+        if st.session_state.presentation_layer_info:
+            info = st.session_state.presentation_layer_info
+            st.success(f"✅ {info.summary}")
+
+            # Show controller/action list
+            if info.controllers:
+                with st.expander(f"📋 {info.total_controllers} Presentation Components", expanded=True):
+                    for controller in info.controllers:
+                        st.write(f"### {controller.name}")
+                        st.write(f"**Type**: {controller.type}")
+                        st.write(f"**Package**: `{controller.package}`")
+
+                        if controller.base_path:
+                            st.write(f"**Base Path**: `{controller.base_path}`")
+
+                        # Show endpoints
+                        if controller.endpoints:
+                            st.write(f"**Endpoints** ({len(controller.endpoints)}):")
+                            for endpoint in controller.endpoints:
+                                method_badge = f"`{endpoint.http_method}`"
+                                st.write(f"  - {method_badge} `{endpoint.path}` → `{endpoint.handler_method}()`")
+
+                        # Show dependencies
+                        if controller.dependencies:
+                            st.write(f"**Dependencies**: {', '.join([f'`{dep}`' for dep in controller.dependencies])}")
+
+                        st.write("---")
+
+                # Download button for JSON export
+                json_data = {
+                    "framework": info.framework,
+                    "total_controllers": info.total_controllers,
+                    "total_endpoints": info.total_endpoints,
+                    "controllers": [
+                        {
+                            "name": c.name,
+                            "package": c.package,
+                            "type": c.type,
+                            "base_path": c.base_path,
+                            "file_path": c.file_path,
+                            "endpoints": [
+                                {
+                                    "http_method": e.http_method,
+                                    "path": e.path,
+                                    "handler_method": e.handler_method,
+                                    "return_type": e.return_type
+                                } for e in c.endpoints
+                            ],
+                            "dependencies": c.dependencies
+                        } for c in info.controllers
+                    ]
+                }
+
+                st.download_button(
+                    label="⬇️ Download Presentation Layer JSON",
+                    data=json.dumps(json_data, indent=2),
+                    file_name=f"{repo_info['repo']}_presentation_layer.json",
+                    mime="application/json"
+                )
+        else:
+            st.info("Click 'Extract Presentation Layer' to analyze controllers and endpoints")
+
+    st.write("")
+    st.write("---")
+
     # RAG Index Creation Section
     st.write("## 🧠 Agentic RAG System")
 
@@ -326,6 +427,134 @@ if st.session_state.graph_created and st.session_state.knowledge_graph:
 
     st.write("")
     st.write("---")
+
+    # Functional Specification Generator Section
+    if st.session_state.rag_index_created and st.session_state.vectorstore and st.session_state.presentation_layer_info:
+        st.write("## 📝 Functional Specification Generator")
+
+        info = st.session_state.presentation_layer_info
+
+        col1, col2 = st.columns([1, 3])
+
+        with col1:
+            st.write("**Single Component:**")
+
+            # Dropdown to select a component
+            controller_names = [c.name for c in info.controllers]
+            if controller_names:
+                selected_controller = st.selectbox(
+                    "Select Component",
+                    controller_names,
+                    key="spec_component_select"
+                )
+
+                if st.button("🔍 Generate Spec", use_container_width=True):
+                    with st.spinner(f"Analyzing {selected_controller}..."):
+                        try:
+                            # Find the selected controller
+                            controller = next(
+                                c for c in info.controllers
+                                if c.name == selected_controller
+                            )
+
+                            # Generate spec
+                            agent = FunctionalSpecAgent(st.session_state.vectorstore)
+                            spec = agent.analyze_component(controller)
+                            st.session_state.single_feature_spec = spec
+                            st.rerun()
+
+                        except Exception as e:
+                            st.error(f"❌ Analysis failed: {str(e)}")
+                            import traceback
+                            with st.expander("Error Details"):
+                                st.code(traceback.format_exc())
+
+            st.write("")
+            st.write("**Full Project:**")
+
+            if st.button("📄 Generate Complete Spec", use_container_width=True):
+                with st.spinner(f"Analyzing all {len(info.controllers)} components..."):
+                    try:
+                        agent = FunctionalSpecAgent(st.session_state.vectorstore)
+                        project_spec = agent.analyze_full_project(
+                            info.controllers,
+                            repo_info['repo']
+                        )
+                        st.session_state.functional_spec = project_spec
+                        st.rerun()
+
+                    except Exception as e:
+                        st.error(f"❌ Analysis failed: {str(e)}")
+                        import traceback
+                        with st.expander("Error Details"):
+                            st.code(traceback.format_exc())
+
+        with col2:
+            # Show single component spec
+            if st.session_state.single_feature_spec:
+                spec = st.session_state.single_feature_spec
+                st.success(f"✅ Generated specification for {spec.feature_name}")
+
+                with st.expander(f"📋 {spec.feature_name} Specification", expanded=True):
+                    # Display full LLM analysis if available
+                    if hasattr(spec, 'full_spec_text'):
+                        st.markdown(spec.full_spec_text)
+                    else:
+                        st.write(f"**Overview**: {spec.overview}")
+
+                    st.write("")
+                    st.write("**Endpoints:**")
+                    for ep in spec.endpoints:
+                        st.write(f"- `{ep['method']}` `{ep['path']}` → `{ep['handler']}()`")
+
+                    if spec.dependencies:
+                        st.write("")
+                        st.write(f"**Dependencies**: {', '.join([f'`{dep}`' for dep in spec.dependencies])}")
+
+                # Download button
+                spec_md = format_feature_spec_markdown(spec)
+                st.download_button(
+                    label="⬇️ Download Specification",
+                    data=spec_md,
+                    file_name=f"{spec.source_component}_spec.md",
+                    mime="text/markdown",
+                    key="download_single_spec"
+                )
+
+            # Show full project spec
+            if st.session_state.functional_spec:
+                project_spec = st.session_state.functional_spec
+                st.success(f"✅ Complete specification generated: {project_spec.total_features} features, {project_spec.total_endpoints} endpoints")
+
+                with st.expander("📄 Project Functional Specification", expanded=False):
+                    st.write(f"**Project**: {project_spec.project_name}")
+                    st.write(f"**Generated**: {project_spec.generated_date}")
+                    st.write("")
+
+                    st.write("**Features:**")
+                    for feature in project_spec.features:
+                        st.write(f"- {feature.feature_name} ({len(feature.endpoints)} endpoints)")
+
+                    st.write("")
+                    st.write("**Cross-Cutting Concerns:**")
+                    for concern in project_spec.cross_cutting_concerns:
+                        st.write(f"- {concern}")
+
+                # Download button for full project spec
+                full_spec_md = format_project_spec_markdown(project_spec)
+                st.download_button(
+                    label="⬇️ Download Complete Functional Specification",
+                    data=full_spec_md,
+                    file_name=f"{repo_info['repo']}_functional_specification.md",
+                    mime="text/markdown",
+                    key="download_full_spec"
+                )
+
+            if not st.session_state.single_feature_spec and not st.session_state.functional_spec:
+                st.info("Select a component and generate spec, or generate complete project specification")
+
+        st.write("")
+        st.write("---")
 
     # Architecture Report & Diagram Generation
     if st.session_state.rag_index_created and st.session_state.vectorstore:
@@ -570,6 +799,9 @@ if st.session_state.graph_created and st.session_state.knowledge_graph:
         st.session_state.repo_info = None
         st.session_state.graph_created = False
         st.session_state.framework_detection = None
+        st.session_state.presentation_layer_info = None
+        st.session_state.functional_spec = None
+        st.session_state.single_feature_spec = None
         st.session_state.rag_index_created = False
         st.session_state.vectorstore = None
         st.session_state.architecture_agent = None
